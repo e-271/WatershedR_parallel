@@ -1,32 +1,41 @@
 # library(lbfgs)
 # library(Rcpp)
+# library(RcppParallel)
 # sourceCpp("crf_exact_updates.cpp")
+# sourceCpp("crf_exact_updates_parallel.cpp")
 # sourceCpp("crf_variational_updates.cpp")
 # sourceCpp("independent_crf_exact_updates.cpp")
 # sourceCpp("crf_pseudolikelihood_updates.cpp")
 
+#' @export
+get_discretized_outliers <- function(outlier_pvalues, pvalue_threshold) {
+    # initialize output
+    outliers_discretized <- matrix(0,dim(outlier_pvalues)[1], dim(outlier_pvalues)[2])
 
-# Convert outlier status into discretized random variables
-get_discretized_outliers <- function(outlier_pvalues) {
-	# initialize output
-	outliers_discretized <- matrix(0,dim(outlier_pvalues)[1], dim(outlier_pvalues)[2])
-	for (dimension in 1:ncol(outlier_pvalues)) {
-		# Check if it is total expression
-		if (min(outlier_pvalues[,dimension], na.rm=TRUE) < 0) {
-			under_expression = outlier_pvalues[,dimension] < 0 & !is.na(outlier_pvalues[,dimension])
-			log_pvalues = -log10(abs(outlier_pvalues[,dimension]) + 1e-6)
-			log_pvalues[under_expression] = log_pvalues[under_expression]*-1
-			#discretized <- cut(log_pvalues,breaks=c(-6.01,-4,-2,-1,1,2,4,6.01))
-			discretized <- cut(log_pvalues, breaks=c(-6.01,-1,1,6.01))
-		} else {
-			log_pvalues = -log10(abs(outlier_pvalues[,dimension]) + 1e-6)
-			# discretized <- cut(log_pvalues, 7)
-			discretized <- cut(log_pvalues, breaks=c(-.01,1,4,6))
-		}
-		outliers_discretized[,dimension] = as.numeric(discretized)
-	}
-	colnames(outliers_discretized) = colnames(outlier_pvalues)
-	return(outliers_discretized)
+    for (dimension in 1:ncol(outlier_pvalues)) {
+		c = 1e-16 # min pvalue for numerical stability
+		t = pvalue_threshold[dimension] # signiciance threshold 1
+		t2 = pvalue_threshold[dimension]/10 # signiciance threshold 2
+		o1 = -log10(t2+c) # mid outlier cutoff
+		o2 = -log10(c) # max outlier cutoff
+		i = -log10(t+c) # inlier cutoff
+        # Check if it is total expression
+        if (min(outlier_pvalues[,dimension], na.rm=TRUE) < 0) {
+            under_expression = outlier_pvalues[,dimension] < 0 & !is.na(outlier_pvalues[,dimension])
+            log_pvalues = -log10(abs(outlier_pvalues[,dimension]) + c)
+            log_pvalues[under_expression] = log_pvalues[under_expression]*-1
+            #discretized <- cut(log_pvalues,breaks=c(-6.01,-4,-2,-1,1,2,4,6.01))
+            #discretized <- cut(log_pvalues, breaks=c(-6.01,-1,1,6.01))
+            discretized <- cut(log_pvalues, breaks=c(-o2,-i,i,o2))
+        } else {
+            log_pvalues = -log10(abs(outlier_pvalues[,dimension]) + c)
+            # discretized <- cut(log_pvalues, 7)
+            discretized <- cut(log_pvalues, breaks=c(-.01,i,o1,o2))
+        }
+        outliers_discretized[,dimension] = as.numeric(discretized)
+    }
+    colnames(outliers_discretized) = colnames(outlier_pvalues)
+    return(outliers_discretized)
 }
 
 
@@ -46,6 +55,7 @@ get_discretized_outliers <- function(outlier_pvalues) {
 #' 
 #' @noRd
 #' 
+#' @export
 load_watershed_data <- function(input_file, number_of_dimensions, pvalue_fraction, pvalue_threshold) {
   # check if it's a URL or a file 
   if(file.exists(input_file)){
@@ -56,7 +66,6 @@ load_watershed_data <- function(input_file, number_of_dimensions, pvalue_fractio
   }else{
     stop(sprintf("Input file %s cannot be found locally and is not a full URL, e.g., beginning with 'http://'.", input_file))
   }
-  
 	# Get genomic features (first 2 columns are line identifiers and last (number_of_dimensions+1) 
   # columns are outlier status' and N2 pair
 	feat <- raw_data[,3:(ncol(raw_data)-number_of_dimensions-1)]
@@ -70,12 +79,16 @@ load_watershed_data <- function(input_file, number_of_dimensions, pvalue_fractio
 	fraction_outliers_binary <- ifelse(abs(outlier_pvalues)<=.1,1,0) # Strictly for initialization of binary output matrix
 	for (dimension_num in 1:number_of_dimensions) {
 		ordered <- sort(abs(outlier_pvalues[,dimension_num]))
-		max_val <- ordered[floor(length(ordered)*pvalue_fraction)]
+		max_val <- ordered[floor(length(ordered)*pvalue_fraction[dimension_num])]
 		fraction_outliers_binary[,dimension_num] <- ifelse(abs(outlier_pvalues[,dimension_num])<=max_val,1,0)
 	}
-  outliers_binary <- ifelse(abs(outlier_pvalues)<=pvalue_threshold,1,0)
+	outliers_binary <- ifelse(abs(outlier_pvalues)<=.1,1,0) # Strictly for initialization of binary output matrix
+	for (dimension_num in 1:number_of_dimensions) {
+   		outliers_binary[,dimension_num] <- ifelse(abs(outlier_pvalues[,dimension_num])<=pvalue_threshold[dimension_num],1,0)
+	}
 	# Convert outlier status into discretized random variables
-	outliers_discrete <- get_discretized_outliers(outlier_pvalues)
+	outliers_discrete <- get_discretized_outliers(outlier_pvalues, pvalue_threshold)
+
 	# Extract array of N2 pairs
 	N2_pairs=factor(raw_data[,"N2pair"], levels=unique(raw_data[,"N2pair"]))
 	# Put all data into compact data structure
@@ -89,6 +102,7 @@ load_watershed_data <- function(input_file, number_of_dimensions, pvalue_fractio
 }
 
 # Compute log-likelihood of L2-regularized logistic regression model
+#' @export
 compute_logistic_regression_likelihood <- function(x, y, feat, lambda) {
 	intercept <- x[1]
 	theta <- x[2:length(x)]
@@ -98,6 +112,7 @@ compute_logistic_regression_likelihood <- function(x, y, feat, lambda) {
 }
 
 # Calculate gradient of L2-regularized logistic regression model
+#' @export
 compute_logistic_regression_gradient <- function(x, y, feat, lambda) {
 	# Extract intercept and coefficients
 	intercept <- x[1]
@@ -122,6 +137,7 @@ compute_logistic_regression_gradient <- function(x, y, feat, lambda) {
 }
 
 # Compute number of edge pairs. In general is just N choose 2. But if N==1, we use the hack the number of edge_pairs is 1
+#' @export
 get_number_of_edge_pairs <- function(number_of_dimensions) {
   val = 1
   if (number_of_dimensions > 1) {
@@ -132,6 +148,7 @@ get_number_of_edge_pairs <- function(number_of_dimensions) {
 
 
 ## Fit Genomic Annotation Model (GAM)
+#' @export
 logistic_regression_genomic_annotation_model_cv <- function(feat_train, binary_outliers_train, nfolds, lambda_costs, lambda_init) {
 	##################################
 	# Some pre-processing
@@ -232,7 +249,10 @@ logistic_regression_genomic_annotation_model_cv <- function(feat_train, binary_o
 	##################################
 	# Initialize parameter variables
 	theta_pair = matrix(0 ,1, get_number_of_edge_pairs(number_of_dimensions))
+    #num_edge_pairs = get_number_of_edge_pairs(number_of_dimensions)
+	#theta_pair = matrix(rnorm(num_edge_pairs), 1, num_edge_pairs)
 	beta_init = matrix(0,number_of_features+1, number_of_dimensions)
+	#beta_init = matrix(rnorm((number_of_features+1)*number_of_dimensions), number_of_features+1, number_of_dimensions)
 	theta_singleton = beta_init[1,]
 	theta = as.matrix(beta_init[2:(number_of_features + 1),])
 	gam_parameters = list(theta_pair=theta_pair, theta_singleton=theta_singleton, theta=theta)
@@ -265,6 +285,7 @@ logistic_regression_genomic_annotation_model_cv <- function(feat_train, binary_o
 
 
 # Compute MAP estimates of the coefficients defined by P(outlier_status| FR)
+#' @export
 map_phi_initialization <- function(discrete_outliers, posterior, number_of_dimensions, pseudoc) {
 	num_bins = 3
 	# Initialize output matrices
@@ -277,8 +298,8 @@ map_phi_initialization <- function(discrete_outliers, posterior, number_of_dimen
 	}
 	# Add prior
 	for (dimension_number in 1:number_of_dimensions) {
-		phi_outlier[dimension_number,] = phi_outlier[dimension_number,] + pseudoc
-		phi_inlier[dimension_number,] = phi_inlier[dimension_number,] + pseudoc
+		phi_outlier[dimension_number,] = phi_outlier[dimension_number,] + pseudoc[dimension_number]
+		phi_inlier[dimension_number,] = phi_inlier[dimension_number,] + pseudoc[dimension_number]
 	}
 	# Normalize
 	phi_outlier <- phi_outlier/rowSums(phi_outlier)
@@ -291,6 +312,7 @@ map_phi_initialization <- function(discrete_outliers, posterior, number_of_dimen
 }
 
 # Put model parameters in an easy to handle data structure
+#' @export
 initialize_model_params <- function(num_samples, 
                                     num_genomic_features, 
                                     number_of_dimensions, 
@@ -326,6 +348,7 @@ initialize_model_params <- function(num_samples,
 
 
 # E-Step: Infer P(Z | G, E, theta, phi)
+#' @export
 update_marginal_posterior_probabilities <- function(feat, discrete_outliers, model_params) {
 	# Done seperately depending on model
 	if (tolower(model_params$model_name) == "river") {
@@ -340,6 +363,17 @@ update_marginal_posterior_probabilities <- function(feat, discrete_outliers, mod
 		                                                                                model_params$number_of_dimensions, 
 		                                                                                get_number_of_edge_pairs(model_params$number_of_dimensions), 
 		                                                                                TRUE)
+	} else if (tolower(model_params$model_name) == "watershed_exact_parallel") {
+		posterior_list <- update_marginal_probabilities_exact_inference_parallel_cpp(feat, 
+		                                                                    discrete_outliers, 
+		                                                                    model_params$theta_singleton, 
+		                                                                    model_params$theta_pair, 
+		                                                                    model_params$theta,
+		                                                                    model_params$phi$inlier_component, 
+		                                                                    model_params$phi$outlier_component, 
+		                                                                    model_params$number_of_dimensions, 
+		                                                                    choose(model_params$number_of_dimensions, 2), 
+		                                                                    TRUE)	
 	} else if (tolower(model_params$model_name) == "watershed_exact") {
 		# Compute Expectation in CPP file ("independent_crf_exact_updates.cpp")
 		posterior_list <- update_marginal_probabilities_exact_inference_cpp(feat, 
@@ -373,6 +407,7 @@ update_marginal_posterior_probabilities <- function(feat, discrete_outliers, mod
 }
 
 # E-Step: Infer P(Z | G, theta)
+#' @export
 update_conditional_z_given_g_probabilities <- function(feat, discrete_outliers, model_params) {
 	# Done seperately depending on model
 	if (tolower(model_params$model_name) == "river") {
@@ -390,6 +425,18 @@ update_conditional_z_given_g_probabilities <- function(feat, discrete_outliers, 
 	} else if (tolower(model_params$model_name) == "watershed_exact") {
 		# Compute Expectation in CPP file ("independent_crf_exact_updates.cpp")
 		posterior_list <- update_marginal_probabilities_exact_inference_cpp(feat, 
+		                                                                    discrete_outliers, 
+		                                                                    model_params$theta_singleton, 
+		                                                                    model_params$theta_pair, 
+		                                                                    model_params$theta, 
+		                                                                    model_params$phi$inlier_component, 
+		                                                                    model_params$phi$outlier_component, 
+		                                                                    model_params$number_of_dimensions, 
+		                                                                    choose(model_params$number_of_dimensions, 2), 
+		                                                                    FALSE)
+	}  else if (tolower(model_params$model_name) == "watershed_exact_parallel") {
+		# Compute Expectation in CPP file ("independent_crf_exact_updates.cpp")
+		posterior_list <- update_marginal_probabilities_exact_inference_parallel_cpp(feat, 
 		                                                                    discrete_outliers, 
 		                                                                    model_params$theta_singleton, 
 		                                                                    model_params$theta_pair, 
@@ -424,6 +471,7 @@ update_conditional_z_given_g_probabilities <- function(feat, discrete_outliers, 
 # First model_params$number_of_dimensions terms are intercepts for each dimension
 # Next there are model_params$number_of_dimensions chunks of length $number_of_genomic_features (each chunk is that dimension's beta)
 # Next there are model_params$number_of_dimensions choose 2 theta_pairs
+#' @export
 extract_gradient_variable_vector <- function(model_params) {
 	# Initialize vector
 	x <- c()
@@ -444,6 +492,7 @@ extract_gradient_variable_vector <- function(model_params) {
 }
 
 # Calculate likelihood of crf (fxn formatted to be used in LBFGS)
+#' @export
 compute_exact_crf_likelihood_for_lbfgs <- function(x, 
                                                    feat, 
                                                    discrete_outliers, 
@@ -485,6 +534,21 @@ compute_exact_crf_likelihood_for_lbfgs <- function(x,
 		                                                             lambda, 
 		                                                             lambda_pair, 
 		                                                             lambda_singleton)
+	} else if (tolower(model_name) == "watershed_exact_parallel") {
+		# Following function comes from CPP code: 'crf_exact_updates.cpp'
+		log_likelihood <- compute_crf_likelihood_exact_inference_parallel_cpp(posterior, 
+		                                                             posterior_pairwise, 
+		                                                             feat, 
+		                                                             discrete_outliers, 
+		                                                             theta_singleton, 
+		                                                             theta_pair, 
+		                                                             theta, 
+		                                                             phi$inlier_component, 
+		                                                             phi$outlier_component, 
+		                                                             number_of_dimensions, 
+		                                                             lambda, 
+		                                                             lambda_pair, 
+		                                                             lambda_singleton)
 	} else if (tolower(model_name) == "river") {
 		# Following function comes from CPP code 'independent_crf_exact_updates.cpp'
 		log_likelihood <- compute_independent_crf_likelihood_exact_inference_cpp(posterior, 
@@ -506,6 +570,7 @@ compute_exact_crf_likelihood_for_lbfgs <- function(x,
 
 
 # Calculate gradient of crf likelihood (fxn formatted to be used in LBFGS)
+#' @export
 compute_exact_crf_gradient_for_lbfgs <- function(x, 
                                                  feat, 
                                                  discrete_outliers, 
@@ -535,6 +600,20 @@ compute_exact_crf_gradient_for_lbfgs <- function(x,
 	if (tolower(model_name) == "watershed_exact") {
 		# Following function comes from CPP code: 'crf_exact_updates.cpp'
 		mu_list <- update_marginal_probabilities_exact_inference_cpp(feat, 
+		                                                             discrete_outliers, 
+		                                                             theta_singleton, 
+		                                                             theta_pair, 
+		                                                             theta, 
+		                                                             phi$inlier_component, 
+		                                                             phi$outlier_component, 
+		                                                             number_of_dimensions, 
+		                                                             choose(number_of_dimensions, 2), 
+		                                                             FALSE)
+		mu <- mu_list$probability
+		mu_pairwise <- mu_list$probability_pairwise
+	} else if (tolower(model_name) == "watershed_exact_parallel") {
+		# Following function comes from CPP code: 'crf_exact_updates.cpp'
+		mu_list <- update_marginal_probabilities_exact_inference_parallel_cpp(feat, 
 		                                                             discrete_outliers, 
 		                                                             theta_singleton, 
 		                                                             theta_pair, 
@@ -576,7 +655,7 @@ compute_exact_crf_gradient_for_lbfgs <- function(x,
 
 	# Gradient of theta-pair terms
 	# Different closed formed gradients used for CRF (ie Watershed_exact) and logistic regression (RIVER)
-	if (tolower(model_name) == "watershed_exact") {
+	if (tolower(model_name) == "watershed_exact" || tolower(model_name) == "watershed_exact_parallel") {
 		grad_pair <- (colSums(posterior_pairwise) - colSums(mu_pairwise))*(1/nrow(posterior_pairwise)) - lambda_pair*theta_pair[1,]
 	} else if (tolower(model_name) == "river"){
 		grad_pair <- numeric(nrow(posterior_pairwise))
@@ -588,6 +667,7 @@ compute_exact_crf_gradient_for_lbfgs <- function(x,
 }
 
 # Calculate pseudolikelihood of crf (fxn formatted to be used in LBFGS)
+#' @export
 compute_exact_crf_pseudolikelihood_for_lbfgs <- function(x, 
                                                          feat, 
                                                          discrete_outliers, 
@@ -631,6 +711,7 @@ compute_exact_crf_pseudolikelihood_for_lbfgs <- function(x,
 }
 
 # Calculate gradient of crf likelihood using Pseudolikelihood (fxn formatted to be used in LBFGS)
+#' @export
 compute_exact_crf_pseudolikelihood_gradient_for_lbfgs <- function(x, 
                                                                   feat, 
                                                                   discrete_outliers, 
@@ -696,13 +777,14 @@ compute_exact_crf_pseudolikelihood_gradient_for_lbfgs <- function(x,
 
 
 # Compute MAP estimates theta (ie the coefficients defining the conditional random field (CRF))
+#' @export
 map_crf <- function(feat, discrete_outliers, model_params) {
 	# Get single vector describing model parameters of the CRF
 	# It is necessary to do this because this is the format necessary for the LBFGS function
 	gradient_variable_vec <- extract_gradient_variable_vector(model_params)
 
 	# Optimize parameters of model using LBFGS (seperate for each of the models)
-	if (tolower(model_params$model_name) == "river" | tolower(model_params$model_name) == "watershed_exact") {
+	if (tolower(model_params$model_name) == "river" | tolower(model_params$model_name) == "watershed_exact" | tolower(model_params$model_name) == "watershed_exact_parallel") {
 		lbfgs_output <- lbfgs::lbfgs(compute_exact_crf_likelihood_for_lbfgs, 
 		                      compute_exact_crf_gradient_for_lbfgs, 
 		                      gradient_variable_vec, 
@@ -751,6 +833,7 @@ map_crf <- function(feat, discrete_outliers, model_params) {
 }
 
 # Compute MAP estimates of phi (ie the coefficients defined by P(outlier_status| FR))
+#' @export
 map_phi <- function(discrete_outliers, model_params) {
 	num_bins = 3
 	# Initialize phi matrices matrices
@@ -767,8 +850,8 @@ map_phi <- function(discrete_outliers, model_params) {
 
     # Add constant Dirichlet prior to count table
     for (dimension_number in 1:model_params$number_of_dimensions) {
-    	phi_outlier[dimension_number,] = phi_outlier[dimension_number,] + model_params$pseudoc
-    	phi_inlier[dimension_number,] = phi_inlier[dimension_number,] + model_params$pseudoc
+    	phi_outlier[dimension_number,] = phi_outlier[dimension_number,] + model_params$pseudoc[dimension_number]
+    	phi_inlier[dimension_number,] = phi_inlier[dimension_number,] + model_params$pseudoc[dimension_number]
     }
     # Normalize
     phi_outlier <- phi_outlier/rowSums(phi_outlier)
@@ -781,6 +864,7 @@ map_phi <- function(discrete_outliers, model_params) {
 }
 
 # Check convergence of Watershed
+#' @export
 check_convergence <- function(model_params, phi_old, theta_old, theta_singleton_old, theta_pair_old, iter, max_iter) {
 	# Initialize to not converged
 	converged = FALSE
@@ -823,6 +907,7 @@ check_convergence <- function(model_params, phi_old, theta_old, theta_singleton_
 }
 
 ### Fit Watershed Model
+#' @export
 train_watershed_model <- function(feat, 
                                   discrete_outliers, 
                                   phi_init, 

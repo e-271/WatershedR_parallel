@@ -83,15 +83,17 @@ predict_watershed <- function(training_input,
                               prediction_input,
                               number_dimensions = 1,
                               model_name = "Watershed_exact",
-                              dirichlet_prior_parameter = 10,
+                              dirichlet_prior_parameter = c(10),
                               l2_prior_parameter = 0.1,
                               output_prefix = "watershed",
                               binary_pvalue_threshold = 0.1,
                               lambda_costs = c(.1, .01, 1e-3),
                               nfolds = 5, 
                               vi_step_size = 0.8,
-                              vi_threshold = 1e-8){
+                              vi_threshold = 1e-8,
+                              load_model=""){
 
+  print("running custom WatershedR predict") 
   # process args
   training_input_file <- training_input
   prediction_input_file <- prediction_input
@@ -116,17 +118,25 @@ predict_watershed <- function(training_input,
   #######################################
   ## Train Watershed model on training data
   #######################################
-  watershed_object <- learn_watershed_model_parameters_from_training_data(training_input_file, 
-                                                                          number_of_dimensions, 
-                                                                          model_name, 
-                                                                          pseudoc, 
-                                                                          lambda_init, 
-                                                                          binary_pvalue_threshold, 
-                                                                          lambda_costs, 
-                                                                          nfolds, 
-                                                                          vi_step_size, 
-                                                                          vi_threshold)
-  
+  #watershed_object <- learn_watershed_model_parameters_from_training_data(training_input_file, 
+  #                                                                        number_of_dimensions, 
+  #                                                                        model_name, 
+  #                                                                        pseudoc, 
+  #                                                                        lambda_init, 
+  #                                                                        binary_pvalue_threshold, 
+  #                                                                        lambda_costs, 
+  #                                                                        nfolds, 
+  #                                                                        vi_step_size, 
+  #                                                                        vi_threshold)
+  # Read from trained object instead of retraining..
+  evaluation_object <- readRDS(load_model)
+  data_input <- load_watershed_data(training_input_file, number_of_dimensions, .01, binary_pvalue_threshold)
+  feat_all <- data_input$feat
+  mean_feat <- apply(feat_all, 2, mean)
+  sd_feat <- apply(feat_all, 2, sd)
+  watershed_object <- list(mean_feat=mean_feat,sd_feat=sd_feat, model_params=evaluation_object$model_params, gam_model_params=evaluation_object$gam_model_params) 
+
+
   #######################################
   ## Save trained object as .rds file
   #######################################

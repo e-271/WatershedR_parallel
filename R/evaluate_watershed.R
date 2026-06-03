@@ -137,19 +137,22 @@
 #' An example of this can be seen in the \code{pheno_2_pvalue} column of 
 #' \href{example_data/watershed_example_data.txt}{https://raw.githubusercontent.com/BennyStrobes/Watershed/master/example_data/watershed_example_data.txt}.
 #' 
+
 evaluate_watershed <- function(input_file, 
                                model_name, 
                                number_of_dimensions = 1, 
-                               dirichlet_prior = 10, 
+                               dirichlet_prior = c(10), 
                                l2_prior_parameter = NULL, 
                                output_prefix = "watershed", 
-                               n2_pair_pvalue_fraction = 0.1, 
+                               n2_pair_pvalue_fraction = c(0.1), 
                                binary_pvalue_threshold = 0.1, 
                                lambda_costs = c(.1, .01, 1e-3), 
                                nfolds = 5, 
                                vi_step_size = 0.8, 
-                               vi_threshold = 1e-8){
-  
+                               vi_threshold = 1e-8,
+                               load_model=""){
+ 
+  print("running custom WatershedR evaluate") 
   # make argument names match
   pseudoc <- dirichlet_prior
   lambda_init <- l2_prior_parameter
@@ -157,8 +160,8 @@ evaluate_watershed <- function(input_file,
   
   ### check arguments 
   model_name <- tolower(model_name)
-  if(!model_name %in% c("river","watershed_exact","watershed_approximate")){
-    stop("Model name must be one of 'RIVER', 'Watershed_exact', 'Watershed_approximate'.")
+  if(!model_name %in% c("river","watershed_exact","watershed_exact_parallel","watershed_approximate")){
+    stop("Model name must be one of 'RIVER', 'Watershed_exact','Watershed_exact_parallel' 'Watershed_approximate'.")
   }
   
   # Change model to RIVER if there is only 1 dimension.
@@ -166,6 +169,7 @@ evaluate_watershed <- function(input_file,
     warning("Only RIVER can be run on data with 1 dimension.\n Changing model to RIVER.")
     model_name <- "river"
   }
+  print(sprintf("using model %s", model_name))
   
   ########################
   ## Load in data
@@ -177,7 +181,7 @@ evaluate_watershed <- function(input_file,
   binary_outliers_all <- data_input$outliers_binary
   fraction_binary_outliers_all <- data_input$fraction_outliers_binary
   N2_pairs <- data_input$N2_pairs
-  
+
   ## Extract training data (ie. non-N2-pairs)
   feat_train <- feat_all[is.na(N2_pairs),]
   discrete_outliers_train <- as.matrix(discrete_outliers_all[is.na(N2_pairs),])
@@ -215,53 +219,70 @@ evaluate_watershed <- function(input_file,
   feat_train <- scale(feat_train, center=mean_feat, scale=sd_feat)
   feat_test <- scale(feat_test, center=mean_feat, scale=sd_feat)
   
-  #######################################
-  ## Fit Genomic Annotation Model (GAM)
-  #######################################
-  gam_data <- logistic_regression_genomic_annotation_model_cv(feat_train, binary_outliers_train, nfolds, lambda_costs, lambda_init)
-  # Report optimal lambda learned from cross-validation data (if applicable)
-  if (is.null(lambda_init)) {
-    message(paste0(nfolds,"-fold cross validation on GAM yielded optimal lambda of ", gam_data$lambda))
+  if (load_model != "") {
+      # train_object <- readRDS(paste0(output_stem, "_train_object.rds")) 
+      # gam_data <- train_object$gam_model_params
+      # watershed_model <- train_object$model_params
+      evaluation_object <- readRDS(load_model) 
+      gam_data <- evaluation_object$gam_model_params
+      watershed_model <- evaluation_object$model_params
+
+      # Get test set posteriors
+      gam_posterior_test_obj <- update_independent_marginal_probabilities_exact_inference_cpp(feat_test, binary_outliers_test1, gam_data$gam_parameters$theta_singleton, gam_data$gam_parameters$theta_pair, gam_data$gam_parameters$theta, matrix(0,2,2), matrix(0,2,2), number_of_dimensions, choose(number_of_dimensions, 2), FALSE)
+      gam_test_posteriors <- gam_posterior_test_obj$probability
+  } else {
+      #######################################
+      ## Fit Genomic Annotation Model (GAM)
+      #######################################
+      gam_data <- logistic_regression_genomic_annotation_model_cv(feat_train, binary_outliers_train, nfolds, lambda_costs, lambda_init)
+      # Report optimal lambda learned from cross-validation data (if applicable)
+      if (is.null(lambda_init)) {
+        message(paste0(nfolds,"-fold cross validation on GAM yielded optimal lambda of ", gam_data$lambda))
+      }
+      # Compute GAM Predictions on test data in CPP file ("independent_crf_exact_updates.cpp")
+      gam_posterior_test_obj <- update_independent_marginal_probabilities_exact_inference_cpp(feat_test, binary_outliers_test1, gam_data$gam_parameters$theta_singleton, gam_data$gam_parameters$theta_pair, gam_data$gam_parameters$theta, matrix(0,2,2), matrix(0,2,2), number_of_dimensions, choose(number_of_dimensions, 2), FALSE)
+      gam_test_posteriors <- gam_posterior_test_obj$probability
+      
+      #######################################
+      ### Initialize phi using GAM
+      #######################################
+      # Compute GAM Predictions on training data in CPP file ("independent_crf_exact_updates.cpp")
+      gam_posterior_train_obj <- update_independent_marginal_probabilities_exact_inference_cpp(feat_train, 
+                                                                                               binary_outliers_test1, 
+                                                                                               gam_data$gam_parameters$theta_singleton, 
+                                                                                               gam_data$gam_parameters$theta_pair, 
+                                                                                               gam_data$gam_parameters$theta, 
+                                                                                               matrix(0,2,2), 
+                                                                                               matrix(0,2,2), 
+                                                                                               number_of_dimensions, 
+                                                                                               choose(number_of_dimensions, 2), 
+                                                                                               FALSE)
+      gam_train_posteriors <- gam_posterior_train_obj$probability
+      # Initialize Phi using GAM posteriors
+      # ie. Compute MAP estimates of the coefficients defined by P(outlier_status| FR)
+      phi_init <- map_phi_initialization(discrete_outliers_train, gam_train_posteriors, number_of_dimensions, pseudoc)
+  
+      #######################################
+      ### Fit Watershed Model
+      #######################################
+      watershed_model <- train_watershed_model(feat_train, 
+                                               discrete_outliers_train, 
+                                               phi_init, 
+                                               gam_data$gam_parameters$theta_pair, 
+                                               gam_data$gam_parameters$theta_singleton, 
+                                               gam_data$gam_parameters$theta, 
+                                               pseudoc, 
+                                               gam_data$lambda,
+                                               number_of_dimensions, 
+                                               model_name, 
+                                               vi_step_size, 
+                                               vi_threshold)
+      
+      train_object <- list(model_params=watershed_model, 
+                                gam_model_params=gam_data)
+      saveRDS(train_object, paste0(output_stem, "_train_object.rds"))
   }
-  # Compute GAM Predictions on test data in CPP file ("independent_crf_exact_updates.cpp")
-  gam_posterior_test_obj <- update_independent_marginal_probabilities_exact_inference_cpp(feat_test, binary_outliers_test1, gam_data$gam_parameters$theta_singleton, gam_data$gam_parameters$theta_pair, gam_data$gam_parameters$theta, matrix(0,2,2), matrix(0,2,2), number_of_dimensions, choose(number_of_dimensions, 2), FALSE)
-  gam_test_posteriors <- gam_posterior_test_obj$probability
-  
-  #######################################
-  ### Initialize phi using GAM
-  #######################################
-  # Compute GAM Predictions on training data in CPP file ("independent_crf_exact_updates.cpp")
-  gam_posterior_train_obj <- update_independent_marginal_probabilities_exact_inference_cpp(feat_train, 
-                                                                                           binary_outliers_test1, 
-                                                                                           gam_data$gam_parameters$theta_singleton, 
-                                                                                           gam_data$gam_parameters$theta_pair, 
-                                                                                           gam_data$gam_parameters$theta, 
-                                                                                           matrix(0,2,2), 
-                                                                                           matrix(0,2,2), 
-                                                                                           number_of_dimensions, 
-                                                                                           choose(number_of_dimensions, 2), 
-                                                                                           FALSE)
-  gam_train_posteriors <- gam_posterior_train_obj$probability
-  # Initialize Phi using GAM posteriors
-  # ie. Compute MAP estimates of the coefficients defined by P(outlier_status| FR)
-  phi_init <- map_phi_initialization(discrete_outliers_train, gam_train_posteriors, number_of_dimensions, pseudoc)
-  
-  #######################################
-  ### Fit Watershed Model
-  #######################################
-  watershed_model <- train_watershed_model(feat_train, 
-                                           discrete_outliers_train, 
-                                           phi_init, 
-                                           gam_data$gam_parameters$theta_pair, 
-                                           gam_data$gam_parameters$theta_singleton, 
-                                           gam_data$gam_parameters$theta, 
-                                           pseudoc, 
-                                           gam_data$lambda, 
-                                           number_of_dimensions, 
-                                           model_name, 
-                                           vi_step_size, 
-                                           vi_threshold)
-  
+
   #######################################
   ## Compute Watershed Posterior probabilities for held-out test data (ie the N2 pairs)
   #######################################
@@ -323,9 +344,15 @@ compute_auc_across_dimensions <- function(number_of_dimensions,
 		test_outlier_status <- binary_outliers_test2[,dimension]
 
 	  # Watershed evaluation curves
-		watershed_roc_obj <- roc.curve(scores.class0 = na.omit(watershed_posteriors[,dimension][test_outlier_status==1 & !is.na(real_valued_outliers_test1[,dimension])]), scores.class1 = na.omit(watershed_posteriors[,dimension][test_outlier_status==0 & !is.na(real_valued_outliers_test1[,dimension])]), curve = T)
-		watershed_pr_obj <- pr.curve(scores.class0 = na.omit(watershed_posteriors[,dimension][test_outlier_status==1 & !is.na(real_valued_outliers_test1[,dimension])]), scores.class1 = na.omit(watershed_posteriors[,dimension][test_outlier_status==0 & !is.na(real_valued_outliers_test1[,dimension])]), curve = T)
-	
+		watershed_roc_obj <- roc.curve(
+            scores.class0 = na.omit(watershed_posteriors[,dimension][test_outlier_status==1 & !is.na(real_valued_outliers_test1[,dimension])]), 
+            scores.class1 = na.omit(watershed_posteriors[,dimension][test_outlier_status==0 & !is.na(real_valued_outliers_test1[,dimension])]), 
+            curve = T)
+		watershed_pr_obj <- pr.curve(
+            scores.class0 = na.omit(watershed_posteriors[,dimension][test_outlier_status==1 & !is.na(real_valued_outliers_test1[,dimension])]), 
+            scores.class1 = na.omit(watershed_posteriors[,dimension][test_outlier_status==0 & !is.na(real_valued_outliers_test1[,dimension])]), 
+            curve = T)
+                
 		# GAM evaluation curves
 		gam_roc_obj <- roc.curve(scores.class0 = na.omit(gam_posteriors[,dimension][test_outlier_status==1 & !is.na(real_valued_outliers_test1[,dimension])]), scores.class1 = na.omit(gam_posteriors[,dimension][test_outlier_status==0 & !is.na(real_valued_outliers_test1[,dimension])]), curve = T)
  		gam_pr_obj <- pr.curve(scores.class0 = na.omit(gam_posteriors[,dimension][test_outlier_status==1 & !is.na(real_valued_outliers_test1[,dimension])]), scores.class1 = na.omit(gam_posteriors[,dimension][test_outlier_status==0 & !is.na(real_valued_outliers_test1[,dimension])]), curve = T)
@@ -337,16 +364,17 @@ compute_auc_across_dimensions <- function(number_of_dimensions,
          	watershed_pr_auc=watershed_pr_obj$auc.integral,
          	watershed_recall=watershed_pr_obj$curve[,1],
          	watershed_precision=watershed_pr_obj$curve[,2],
+         	watershed_threshold=watershed_pr_obj$curve[,3],          
          	GAM_sens=gam_roc_obj$curve[,2],
           GAM_spec=1-gam_roc_obj$curve[,1],
           GAM_auc=gam_roc_obj$auc,
          	GAM_pr_auc=gam_pr_obj$auc.integral,
          	GAM_recall=gam_pr_obj$curve[,1],
-         	GAM_precision=gam_pr_obj$curve[,2])
+         	GAM_precision=gam_pr_obj$curve[,2],
+          GAM_threshold=gam_pr_obj$curve[,3])
 
 		auc_object_across_dimensions[[dimension]] <- list(evaROC=evaROC)
 	}
 
 	return(auc_object_across_dimensions)
 }
-

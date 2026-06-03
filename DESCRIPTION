@@ -23,14 +23,16 @@ URL: https://github.com/nicolerg/WatershedR,
     https://www.ncbi.nlm.nih.gov/pmc/articles/PMC7646251/
 Imports: 
     Rcpp (>= 1.0.9),
+    RcppParallel,
     lbfgs,
     PRROC,
     RCurl
 Encoding: UTF-8
 RoxygenNote: 7.2.1
 Roxygen: list(markdown = TRUE)
-LinkingTo: Rcpp
+LinkingTo: Rcpp, RcppParallel
 Suggests: 
     knitr,
     rmarkdown
 VignetteBuilder: knitr
+SystemRequirements: C++11, OpenMP

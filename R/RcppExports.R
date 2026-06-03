@@ -13,6 +13,14 @@ compute_crf_likelihood_exact_inference_cpp <- function(posterior, posterior_pair
     .Call(`_WatershedR_compute_crf_likelihood_exact_inference_cpp`, posterior, posterior_pairwise, feat, discrete_outliers, theta_singleton, theta_pair, theta, phi_inlier, phi_outlier, number_of_dimensions, lambda, lambda_pair, lambda_singleton)
 }
 
+update_marginal_probabilities_exact_inference_parallel_cpp <- function(feat, discrete_outliers, theta_singleton, theta_pair, theta, phi_inlier, phi_outlier, number_of_dimensions, number_of_pairs, posterior_bool) {
+    .Call(`_WatershedR_update_marginal_probabilities_exact_inference_parallel_cpp`, feat, discrete_outliers, theta_singleton, theta_pair, theta, phi_inlier, phi_outlier, number_of_dimensions, number_of_pairs, posterior_bool)
+}
+
+compute_crf_likelihood_exact_inference_parallel_cpp <- function(posterior, posterior_pairwise, feat, discrete_outliers, theta_singleton, theta_pair, theta, phi_inlier, phi_outlier, number_of_dimensions, lambda, lambda_pair, lambda_singleton) {
+    .Call(`_WatershedR_compute_crf_likelihood_exact_inference_parallel_cpp`, posterior, posterior_pairwise, feat, discrete_outliers, theta_singleton, theta_pair, theta, phi_inlier, phi_outlier, number_of_dimensions, lambda, lambda_pair, lambda_singleton)
+}
+
 update_pseudolikelihood_marginal_probabilities_exact_inference_cpp <- function(feat, discrete_outliers, posterior, theta_singleton, theta_pair, theta, phi_inlier, phi_outlier, number_of_dimensions, number_of_pairs, posterior_bool) {
     .Call(`_WatershedR_update_pseudolikelihood_marginal_probabilities_exact_inference_cpp`, feat, discrete_outliers, posterior, theta_singleton, theta_pair, theta, phi_inlier, phi_outlier, number_of_dimensions, number_of_pairs, posterior_bool)
 }
