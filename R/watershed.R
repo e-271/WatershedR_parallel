@@ -147,6 +147,24 @@ get_number_of_edge_pairs <- function(number_of_dimensions) {
 }
 
 
+# Validate and expand the L2 prior parameter (lambda) into a per-dimension vector.
+# Accepts a single scalar (replicated across all dimensions, preserving the original
+# behavior) or a vector with one value per dimension (one L2 prior per input ome).
+#' @export
+expand_l2_prior_parameter <- function(lambda, number_of_dimensions) {
+	if (is.null(lambda)) {
+		return(NULL)
+	}
+	if (length(lambda) == 1) {
+		return(rep(lambda, number_of_dimensions))
+	}
+	if (length(lambda) != number_of_dimensions) {
+		stop(sprintf("l2_prior_parameter must be either a single value or a vector of length number_of_dimensions (%d). Received a vector of length %d.", number_of_dimensions, length(lambda)))
+	}
+	return(lambda)
+}
+
+
 ## Fit Genomic Annotation Model (GAM)
 #' @export
 logistic_regression_genomic_annotation_model_cv <- function(feat_train, binary_outliers_train, nfolds, lambda_costs, lambda_init) {
@@ -156,6 +174,9 @@ logistic_regression_genomic_annotation_model_cv <- function(feat_train, binary_o
 	# Extract dimensionality of space from the data
 	number_of_dimensions <- dim(binary_outliers_train)[2]
 	number_of_features <- dim(feat_train)[2]
+
+	# Validate/expand a user-supplied L2 prior into a per-dimension vector (NULL triggers grid search below)
+	lambda_init <- expand_l2_prior_parameter(lambda_init, number_of_dimensions)
 
 	# Initialize logistic regression model parameters to zeros
 	gradient_variable_vec <- rep(0, number_of_features+1)
@@ -236,8 +257,9 @@ logistic_regression_genomic_annotation_model_cv <- function(feat_train, binary_o
 		}
 		# Get best lambda (ie, the one with highest avg auc across folds)
 		best_index <- which(avg_aucs==max(avg_aucs))[1]  # [1] for tie breakers
-		best_lambda <- lambda_costs[best_index]
-	  # If lambda_init != NULL, use the user-specified values
+		# Grid search selects a single shared lambda; replicate it across all dimensions
+		best_lambda <- rep(lambda_costs[best_index], number_of_dimensions)
+	  # If lambda_init != NULL, use the user-specified (per-dimension) values
 	} else {
 		best_lambda = lambda_init
 	}
@@ -264,13 +286,13 @@ logistic_regression_genomic_annotation_model_cv <- function(feat_train, binary_o
 		observed_training_outliers <- as.matrix(binary_outliers_train_shuff[observed_training_indices, dimension])
 		observed_training_feat <- feat_train_shuff[observed_training_indices,]
 
-		# Run Logistic regression
+		# Run Logistic regression (using this dimension's L2 prior)
 		lbfgs_output <- lbfgs::lbfgs(compute_logistic_regression_likelihood, 
 		                             compute_logistic_regression_gradient, 
 		                             gradient_variable_vec, 
 		                             y=observed_training_outliers, 
 		                             feat=observed_training_feat, 
-		                             lambda=best_lambda, 
+		                             lambda=best_lambda[dimension], 
 		                             invisible=1)
 
 		if (lbfgs_output$convergence != 0 & lbfgs_output$convergence != 2) {
@@ -325,6 +347,8 @@ initialize_model_params <- function(num_samples,
                                     model_name, 
                                     vi_step_size, 
                                     vi_thresh){
+	# Ensure lambda is a per-dimension vector (a single value is replicated across dimensions)
+	lambda <- expand_l2_prior_parameter(lambda, number_of_dimensions)
 	model_params <- list(theta_pair = theta_pair_init, 
   	theta_singleton = theta_singleton_init,
   	theta = theta_init,
@@ -336,9 +360,12 @@ initialize_model_params <- function(num_samples,
   	num_genomic_features = num_genomic_features,
   	number_of_dimensions = number_of_dimensions,
   	phi = phi_init,
+  	# Per-dimension L2 prior on the genomic-annotation weights (theta) for each input ome
   	lambda = lambda,
   	lambda_singleton = 0,  # No regularization of intercepts
-  	lambda_pair = lambda,
+  	# Edges connect pairs of dimensions, so a single scalar prior is used for theta_pair
+  	# (mean of the per-dimension lambdas; equals lambda for a single shared value)
+  	lambda_pair = mean(lambda),
   	pseudoc = pseudoc,
   	vi_step_size =vi_step_size,
   	vi_thresh = vi_thresh,
@@ -651,7 +678,9 @@ compute_exact_crf_gradient_for_lbfgs <- function(x,
 		temp_grad <- colSums(posterior[,dimension]*feat) - colSums(mu[,dimension]*feat)
 		grad_theta <- c(grad_theta, temp_grad)
 	}
-	grad_theta <- grad_theta*(1/nrow(posterior)) - lambda*theta_vec
+	# Apply this dimension's L2 prior to its block of feature weights (lambda has one entry per dimension)
+	lambda_per_feature <- rep(lambda, each=num_genomic_features)
+	grad_theta <- grad_theta*(1/nrow(posterior)) - lambda_per_feature*theta_vec
 
 	# Gradient of theta-pair terms
 	# Different closed formed gradients used for CRF (ie Watershed_exact) and logistic regression (RIVER)
@@ -763,7 +792,9 @@ compute_exact_crf_pseudolikelihood_gradient_for_lbfgs <- function(x,
 		temp_grad <- colSums(posterior[,dimension]*feat) - colSums(mu[,dimension]*feat)
 		grad_theta <- c(grad_theta, temp_grad)
 	}
-	grad_theta <- grad_theta*(1/nrow(posterior)) - lambda*theta_vec
+	# Apply this dimension's L2 prior to its block of feature weights (lambda has one entry per dimension)
+	lambda_per_feature <- rep(lambda, each=num_genomic_features)
+	grad_theta <- grad_theta*(1/nrow(posterior)) - lambda_per_feature*theta_vec
 
 	# Gradient of theta pair terms (edges)
 	grad_pair <- (2.0*colSums(posterior_pairwise) - 

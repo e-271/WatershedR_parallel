@@ -227,7 +227,7 @@ List update_marginal_probabilities_exact_inference_cpp(NumericMatrix feat, Numer
 
 // Compute exact likelihood of K=number_of_dimensions dimensionsal Conditional Random Field (CRF)
 // [[Rcpp::export]]
-double compute_crf_likelihood_exact_inference_cpp(NumericMatrix posterior, NumericMatrix posterior_pairwise, NumericMatrix feat, NumericMatrix discrete_outliers, NumericVector theta_singleton, NumericMatrix theta_pair, NumericMatrix theta, NumericMatrix phi_inlier, NumericMatrix phi_outlier, int number_of_dimensions, double lambda, double lambda_pair, double lambda_singleton) {
+double compute_crf_likelihood_exact_inference_cpp(NumericMatrix posterior, NumericMatrix posterior_pairwise, NumericMatrix feat, NumericMatrix discrete_outliers, NumericVector theta_singleton, NumericMatrix theta_pair, NumericMatrix theta, NumericMatrix phi_inlier, NumericMatrix phi_outlier, int number_of_dimensions, NumericVector lambda, double lambda_pair, double lambda_singleton) {
   // Initialize output likelihood
   double log_likelihood = 0;
   // Loop through samples
@@ -272,9 +272,9 @@ double compute_crf_likelihood_exact_inference_cpp(NumericMatrix posterior, Numer
         dimension_counter += 1;
       }
     }
-    // Regularize feature vectors 
+    // Regularize feature vectors (using this dimension's L2 prior)
     for (int d = 0; d < feat.ncol(); d++) {
-      log_likelihood = log_likelihood - .5*lambda*(theta(d,dimension)*theta(d,dimension));
+      log_likelihood = log_likelihood - .5*lambda[dimension]*(theta(d,dimension)*theta(d,dimension));
     }
   }
   return log_likelihood;

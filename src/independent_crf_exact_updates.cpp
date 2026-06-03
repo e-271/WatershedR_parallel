@@ -96,7 +96,7 @@ List update_independent_marginal_probabilities_exact_inference_cpp(NumericMatrix
 
 // Compute likelihood for K=number_of_dimensions independent logistic regression models
 // [[Rcpp::export]]
-double compute_independent_crf_likelihood_exact_inference_cpp(NumericMatrix posterior, NumericMatrix posterior_pairwise, NumericMatrix feat, NumericMatrix discrete_outliers, NumericVector theta_singleton, NumericMatrix theta_pair, NumericMatrix theta, NumericMatrix phi_inlier, NumericMatrix phi_outlier, int number_of_dimensions, double lambda, double lambda_pair, double lambda_singleton) {
+double compute_independent_crf_likelihood_exact_inference_cpp(NumericMatrix posterior, NumericMatrix posterior_pairwise, NumericMatrix feat, NumericMatrix discrete_outliers, NumericVector theta_singleton, NumericMatrix theta_pair, NumericMatrix theta, NumericMatrix phi_inlier, NumericMatrix phi_outlier, int number_of_dimensions, NumericVector lambda, double lambda_pair, double lambda_singleton) {
   // Initialize output likelihood
   double log_likelihood = 0;
   // Loop through samples
@@ -124,9 +124,9 @@ double compute_independent_crf_likelihood_exact_inference_cpp(NumericMatrix post
   for (int dimension = 0; dimension < number_of_dimensions; dimension++) {
     // Generally lambda_singleton==0, so this term does not contribute. But theoretically could
     log_likelihood = log_likelihood - .5*lambda_singleton*(theta_singleton(dimension)*theta_singleton(dimension));
-    // Regularize feature weights
+    // Regularize feature weights (using this dimension's L2 prior)
     for (int d = 0; d < feat.ncol(); d++) {
-      log_likelihood = log_likelihood - .5*lambda*(theta(d,dimension)*theta(d,dimension));
+      log_likelihood = log_likelihood - .5*lambda[dimension]*(theta(d,dimension)*theta(d,dimension));
     }
   }
   return log_likelihood;

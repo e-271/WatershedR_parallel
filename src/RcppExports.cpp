@@ -42,7 +42,7 @@ BEGIN_RCPP
 END_RCPP
 }
 // compute_crf_likelihood_exact_inference_cpp
-double compute_crf_likelihood_exact_inference_cpp(NumericMatrix posterior, NumericMatrix posterior_pairwise, NumericMatrix feat, NumericMatrix discrete_outliers, NumericVector theta_singleton, NumericMatrix theta_pair, NumericMatrix theta, NumericMatrix phi_inlier, NumericMatrix phi_outlier, int number_of_dimensions, double lambda, double lambda_pair, double lambda_singleton);
+double compute_crf_likelihood_exact_inference_cpp(NumericMatrix posterior, NumericMatrix posterior_pairwise, NumericMatrix feat, NumericMatrix discrete_outliers, NumericVector theta_singleton, NumericMatrix theta_pair, NumericMatrix theta, NumericMatrix phi_inlier, NumericMatrix phi_outlier, int number_of_dimensions, NumericVector lambda, double lambda_pair, double lambda_singleton);
 RcppExport SEXP _WatershedR_compute_crf_likelihood_exact_inference_cpp(SEXP posteriorSEXP, SEXP posterior_pairwiseSEXP, SEXP featSEXP, SEXP discrete_outliersSEXP, SEXP theta_singletonSEXP, SEXP theta_pairSEXP, SEXP thetaSEXP, SEXP phi_inlierSEXP, SEXP phi_outlierSEXP, SEXP number_of_dimensionsSEXP, SEXP lambdaSEXP, SEXP lambda_pairSEXP, SEXP lambda_singletonSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
@@ -57,7 +57,7 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< NumericMatrix >::type phi_inlier(phi_inlierSEXP);
     Rcpp::traits::input_parameter< NumericMatrix >::type phi_outlier(phi_outlierSEXP);
     Rcpp::traits::input_parameter< int >::type number_of_dimensions(number_of_dimensionsSEXP);
-    Rcpp::traits::input_parameter< double >::type lambda(lambdaSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type lambda(lambdaSEXP);
     Rcpp::traits::input_parameter< double >::type lambda_pair(lambda_pairSEXP);
     Rcpp::traits::input_parameter< double >::type lambda_singleton(lambda_singletonSEXP);
     rcpp_result_gen = Rcpp::wrap(compute_crf_likelihood_exact_inference_cpp(posterior, posterior_pairwise, feat, discrete_outliers, theta_singleton, theta_pair, theta, phi_inlier, phi_outlier, number_of_dimensions, lambda, lambda_pair, lambda_singleton));
@@ -85,7 +85,7 @@ BEGIN_RCPP
 END_RCPP
 }
 // compute_crf_likelihood_exact_inference_parallel_cpp
-double compute_crf_likelihood_exact_inference_parallel_cpp(NumericMatrix posterior, NumericMatrix posterior_pairwise, NumericMatrix feat, NumericMatrix discrete_outliers, NumericVector theta_singleton, NumericMatrix theta_pair, NumericMatrix theta, NumericMatrix phi_inlier, NumericMatrix phi_outlier, int number_of_dimensions, double lambda, double lambda_pair, double lambda_singleton);
+double compute_crf_likelihood_exact_inference_parallel_cpp(NumericMatrix posterior, NumericMatrix posterior_pairwise, NumericMatrix feat, NumericMatrix discrete_outliers, NumericVector theta_singleton, NumericMatrix theta_pair, NumericMatrix theta, NumericMatrix phi_inlier, NumericMatrix phi_outlier, int number_of_dimensions, NumericVector lambda, double lambda_pair, double lambda_singleton);
 RcppExport SEXP _WatershedR_compute_crf_likelihood_exact_inference_parallel_cpp(SEXP posteriorSEXP, SEXP posterior_pairwiseSEXP, SEXP featSEXP, SEXP discrete_outliersSEXP, SEXP theta_singletonSEXP, SEXP theta_pairSEXP, SEXP thetaSEXP, SEXP phi_inlierSEXP, SEXP phi_outlierSEXP, SEXP number_of_dimensionsSEXP, SEXP lambdaSEXP, SEXP lambda_pairSEXP, SEXP lambda_singletonSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
@@ -100,7 +100,7 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< NumericMatrix >::type phi_inlier(phi_inlierSEXP);
     Rcpp::traits::input_parameter< NumericMatrix >::type phi_outlier(phi_outlierSEXP);
     Rcpp::traits::input_parameter< int >::type number_of_dimensions(number_of_dimensionsSEXP);
-    Rcpp::traits::input_parameter< double >::type lambda(lambdaSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type lambda(lambdaSEXP);
     Rcpp::traits::input_parameter< double >::type lambda_pair(lambda_pairSEXP);
     Rcpp::traits::input_parameter< double >::type lambda_singleton(lambda_singletonSEXP);
     rcpp_result_gen = Rcpp::wrap(compute_crf_likelihood_exact_inference_parallel_cpp(posterior, posterior_pairwise, feat, discrete_outliers, theta_singleton, theta_pair, theta, phi_inlier, phi_outlier, number_of_dimensions, lambda, lambda_pair, lambda_singleton));
@@ -129,7 +129,7 @@ BEGIN_RCPP
 END_RCPP
 }
 // compute_pseudolikelihood_crf_likelihood_exact_inference_cpp
-double compute_pseudolikelihood_crf_likelihood_exact_inference_cpp(NumericMatrix posterior, NumericMatrix posterior_pairwise, NumericMatrix feat, NumericMatrix discrete_outliers, NumericVector theta_singleton, NumericMatrix theta_pair, NumericMatrix theta, NumericMatrix phi_inlier, NumericMatrix phi_outlier, int number_of_dimensions, double lambda, double lambda_pair, double lambda_singleton);
+double compute_pseudolikelihood_crf_likelihood_exact_inference_cpp(NumericMatrix posterior, NumericMatrix posterior_pairwise, NumericMatrix feat, NumericMatrix discrete_outliers, NumericVector theta_singleton, NumericMatrix theta_pair, NumericMatrix theta, NumericMatrix phi_inlier, NumericMatrix phi_outlier, int number_of_dimensions, NumericVector lambda, double lambda_pair, double lambda_singleton);
 RcppExport SEXP _WatershedR_compute_pseudolikelihood_crf_likelihood_exact_inference_cpp(SEXP posteriorSEXP, SEXP posterior_pairwiseSEXP, SEXP featSEXP, SEXP discrete_outliersSEXP, SEXP theta_singletonSEXP, SEXP theta_pairSEXP, SEXP thetaSEXP, SEXP phi_inlierSEXP, SEXP phi_outlierSEXP, SEXP number_of_dimensionsSEXP, SEXP lambdaSEXP, SEXP lambda_pairSEXP, SEXP lambda_singletonSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
@@ -144,7 +144,7 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< NumericMatrix >::type phi_inlier(phi_inlierSEXP);
     Rcpp::traits::input_parameter< NumericMatrix >::type phi_outlier(phi_outlierSEXP);
     Rcpp::traits::input_parameter< int >::type number_of_dimensions(number_of_dimensionsSEXP);
-    Rcpp::traits::input_parameter< double >::type lambda(lambdaSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type lambda(lambdaSEXP);
     Rcpp::traits::input_parameter< double >::type lambda_pair(lambda_pairSEXP);
     Rcpp::traits::input_parameter< double >::type lambda_singleton(lambda_singletonSEXP);
     rcpp_result_gen = Rcpp::wrap(compute_pseudolikelihood_crf_likelihood_exact_inference_cpp(posterior, posterior_pairwise, feat, discrete_outliers, theta_singleton, theta_pair, theta, phi_inlier, phi_outlier, number_of_dimensions, lambda, lambda_pair, lambda_singleton));
@@ -195,7 +195,7 @@ BEGIN_RCPP
 END_RCPP
 }
 // compute_independent_crf_likelihood_exact_inference_cpp
-double compute_independent_crf_likelihood_exact_inference_cpp(NumericMatrix posterior, NumericMatrix posterior_pairwise, NumericMatrix feat, NumericMatrix discrete_outliers, NumericVector theta_singleton, NumericMatrix theta_pair, NumericMatrix theta, NumericMatrix phi_inlier, NumericMatrix phi_outlier, int number_of_dimensions, double lambda, double lambda_pair, double lambda_singleton);
+double compute_independent_crf_likelihood_exact_inference_cpp(NumericMatrix posterior, NumericMatrix posterior_pairwise, NumericMatrix feat, NumericMatrix discrete_outliers, NumericVector theta_singleton, NumericMatrix theta_pair, NumericMatrix theta, NumericMatrix phi_inlier, NumericMatrix phi_outlier, int number_of_dimensions, NumericVector lambda, double lambda_pair, double lambda_singleton);
 RcppExport SEXP _WatershedR_compute_independent_crf_likelihood_exact_inference_cpp(SEXP posteriorSEXP, SEXP posterior_pairwiseSEXP, SEXP featSEXP, SEXP discrete_outliersSEXP, SEXP theta_singletonSEXP, SEXP theta_pairSEXP, SEXP thetaSEXP, SEXP phi_inlierSEXP, SEXP phi_outlierSEXP, SEXP number_of_dimensionsSEXP, SEXP lambdaSEXP, SEXP lambda_pairSEXP, SEXP lambda_singletonSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
@@ -210,7 +210,7 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< NumericMatrix >::type phi_inlier(phi_inlierSEXP);
     Rcpp::traits::input_parameter< NumericMatrix >::type phi_outlier(phi_outlierSEXP);
     Rcpp::traits::input_parameter< int >::type number_of_dimensions(number_of_dimensionsSEXP);
-    Rcpp::traits::input_parameter< double >::type lambda(lambdaSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type lambda(lambdaSEXP);
     Rcpp::traits::input_parameter< double >::type lambda_pair(lambda_pairSEXP);
     Rcpp::traits::input_parameter< double >::type lambda_singleton(lambda_singletonSEXP);
     rcpp_result_gen = Rcpp::wrap(compute_independent_crf_likelihood_exact_inference_cpp(posterior, posterior_pairwise, feat, discrete_outliers, theta_singleton, theta_pair, theta, phi_inlier, phi_outlier, number_of_dimensions, lambda, lambda_pair, lambda_singleton));
