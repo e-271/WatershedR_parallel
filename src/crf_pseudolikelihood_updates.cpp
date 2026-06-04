@@ -162,9 +162,9 @@ double compute_pseudolikelihood_crf_likelihood_exact_inference_cpp(NumericMatrix
         dimension_counter += 1;
       }
     }
-    // L2 prior on feature weights (using this dimension's L2 prior)
+    // L2 prior n feature weights
     for (int d = 0; d < feat.ncol(); d++) {
-      log_likelihood = log_likelihood - .5*lambda[dimension]*(theta(d,dimension)*theta(d,dimension));
+      log_likelihood = log_likelihood - .5*lambda*(theta(d,dimension)*theta(d,dimension));
     }
   }
   return log_likelihood;

@@ -189,76 +189,66 @@ logistic_regression_genomic_annotation_model_cv <- function(feat_train, binary_o
 	##################################
 	# Select value of lambda to use
 	##################################
-	# If lambda_init == NULL, we will do K-fold cross validation to select the optimal lambda
+	# If lambda_init == NULL, run per-dimension K-fold cross validation to select
+	# the optimal lambda for each dimension independently.
 	if (is.null(lambda_init)) {
-		#Create nfolds equally size folds
 		folds <- cut(seq(1,nrow(feat_train_shuff)),breaks=nfolds,labels=FALSE)
-		# Initialize array to keep track of the average Area Under (Precision-Recall Curve) across different values of lambda (lambda_costs)
-		avg_aucs <- c()
+		best_lambda <- numeric(number_of_dimensions)
 
-		# Iterate across lambdas in lambda_costs 
-		for (cost_iter in 1:length(lambda_costs)) {
-			lambda <- lambda_costs[cost_iter]
-			# Initialize array to keep track of auc in each of the n-folds
-			aucs <- c()
-			# Loop through n-folds
-			for(i in 1:nfolds){
-				# Initialize array to keep track of logistic regression probabiliites in test samples 
-			  # (put in 'pos' array if we know test sample is positive via held out label. Other way around for 'neg' array)
-				pos <- c()
-				neg <- c()
-  			#Segement your data into training and test for this fold
-  			testIndexes <- which(folds==i,arr.ind=TRUE)
-  			feat_test_fold <- feat_train_shuff[testIndexes,]
-  			outliers_test_fold <- as.matrix(binary_outliers_train_shuff[testIndexes,])
-  			feat_train_fold <- feat_train_shuff[-testIndexes,]
-  			outliers_train_fold <- as.matrix(binary_outliers_train_shuff[-testIndexes,])
+		# Search for the best lambda for each dimension separately
+		for (dim_search in 1:number_of_dimensions) {
+			avg_aucs <- c()
 
-  			# Perform logistic regression in each dimension seperately
-  			for (dimension in 1:number_of_dimensions) {
-  				# Remove any samples with NA for this outlier dimension
-  				observed_training_indices <- !is.na(outliers_train_fold[,dimension])
-  				observed_training_outliers <- as.matrix(outliers_train_fold[observed_training_indices, dimension])
-  				observed_training_feat <- feat_train_fold[observed_training_indices,]
-  				observed_testing_indices <- !is.na(outliers_test_fold[,dimension])
-  				observed_testing_outliers <- as.matrix(outliers_test_fold[observed_testing_indices, dimension])
-  				observed_testing_feat <- feat_test_fold[observed_testing_indices,]
-  			
-  				# Optimize logistic regression using LBFGS
-  				lbfgs_output <- lbfgs::lbfgs(compute_logistic_regression_likelihood, 
-  				                             compute_logistic_regression_gradient, 
-  				                             gradient_variable_vec, 
-  				                             y=observed_training_outliers, 
-  				                             feat=observed_training_feat, 
-  				                             lambda=lambda, 
-  				                             invisible=1)
-  			 
-  				if (lbfgs_output$convergence != 0 & lbfgs_output$convergence != 2) {
-  					warning(sprintf("ERROR in logistic regression optimization!\n %s", lbfgs_output$convergence))
-  				}
+			# Iterate across lambda candidates
+			for (cost_iter in 1:length(lambda_costs)) {
+				lambda_candidate <- lambda_costs[cost_iter]
+				aucs <- c()
 
-  				# Make predictions on test data using learned Logistic regression model
-  				predictions <- c(logistic_regression_predictions(observed_testing_feat, 
-  				                                                 lbfgs_output$par[1], 
-  				                                                 lbfgs_output$par[2:length(lbfgs_output$par)]))
-  				# Add precictions to array
-  				pos <- c(pos, predictions[observed_testing_outliers==1])
-  				neg <- c(neg, predictions[observed_testing_outliers==0])
-  			}
+				# Loop through n-folds
+				for (i in 1:nfolds) {
+					pos <- c()
+					neg <- c()
+					testIndexes <- which(folds==i, arr.ind=TRUE)
+					feat_test_fold  <- feat_train_shuff[testIndexes,]
+					feat_train_fold <- feat_train_shuff[-testIndexes,]
+					outliers_test_fold  <- as.matrix(binary_outliers_train_shuff[testIndexes,])
+					outliers_train_fold <- as.matrix(binary_outliers_train_shuff[-testIndexes,])
 
-  			# Compute Precision recall curve for this fold
-  			pr_obj <- PRROC::pr.curve(scores.class0=pos, scores.class1=neg,curve=T)
-  			# Get area under precision-recall curve
-  			auc <- pr_obj$auc.integral
-  			aucs <- c(aucs, auc)
+					# Only evaluate the dimension currently being searched
+					observed_training_indices <- !is.na(outliers_train_fold[, dim_search])
+					observed_training_outliers <- as.matrix(outliers_train_fold[observed_training_indices, dim_search])
+					observed_training_feat <- feat_train_fold[observed_training_indices,]
+					observed_testing_indices <- !is.na(outliers_test_fold[, dim_search])
+					observed_testing_outliers <- as.matrix(outliers_test_fold[observed_testing_indices, dim_search])
+					observed_testing_feat <- feat_test_fold[observed_testing_indices,]
+
+					lbfgs_output <- lbfgs::lbfgs(compute_logistic_regression_likelihood,
+					                             compute_logistic_regression_gradient,
+					                             gradient_variable_vec,
+					                             y=observed_training_outliers,
+					                             feat=observed_training_feat,
+					                             lambda=lambda_candidate,
+					                             invisible=1)
+
+					if (lbfgs_output$convergence != 0 & lbfgs_output$convergence != 2) {
+						warning(sprintf("ERROR in logistic regression optimization!\n %s", lbfgs_output$convergence))
+					}
+
+					predictions <- c(logistic_regression_predictions(observed_testing_feat,
+					                                                  lbfgs_output$par[1],
+					                                                  lbfgs_output$par[2:length(lbfgs_output$par)]))
+					pos <- c(pos, predictions[observed_testing_outliers==1])
+					neg <- c(neg, predictions[observed_testing_outliers==0])
+
+					pr_obj <- PRROC::pr.curve(scores.class0=pos, scores.class1=neg, curve=T)
+					aucs <- c(aucs, pr_obj$auc.integral)
+				}
+				avg_aucs <- c(avg_aucs, median(aucs))
 			}
-			# Compute the median across
-			avg_aucs <- c(avg_aucs, median(aucs))
+
+			best_index <- which(avg_aucs==max(avg_aucs))[1]  # [1] for tie breakers
+			best_lambda[dim_search] <- lambda_costs[best_index]
 		}
-		# Get best lambda (ie, the one with highest avg auc across folds)
-		best_index <- which(avg_aucs==max(avg_aucs))[1]  # [1] for tie breakers
-		# Grid search selects a single shared lambda; replicate it across all dimensions
-		best_lambda <- rep(lambda_costs[best_index], number_of_dimensions)
 	  # If lambda_init != NULL, use the user-specified (per-dimension) values
 	} else {
 		best_lambda = lambda_init

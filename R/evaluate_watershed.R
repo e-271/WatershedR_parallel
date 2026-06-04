@@ -25,9 +25,10 @@
 #'   has approximately the same distribution of positive outlier examples). Default: 0.1
 #' @param binary_pvalue_threshold Float. Absolute p-value threshold used to create 
 #'   binary outliers used for Genomic Annotation Model. Default: 0.1
-#' @param lambda_costs Numeric vector of length 3. If \code{l2_prior_parameter} is NULL, 
-#'   perform grid search over the following values of lambda to determine optimal lambda.
-#'   Default: \code{c(.1, .01, 1e-3)}
+#' @param lambda_costs Numeric vector of candidate lambda values. If \code{l2_prior_parameter} is NULL, 
+#'   perform a per-dimension grid search over these values to determine the optimal lambda for 
+#'   each dimension independently.
+#'   Default: \code{c(1e-4, 5e-4, 1e-3, 1.5e-3)}
 #' @param nfolds Integer. If \code{l2_prior_parameter} is NULL, Number of folds 
 #'   to be used in K-fold cross validation for Genomic annotation model. Default: 5
 #' @param vi_step_size Float. Parameter used for Variational Optimization. 
@@ -150,7 +151,7 @@ evaluate_watershed <- function(input_file,
                                output_prefix = "watershed", 
                                n2_pair_pvalue_fraction = c(0.1), 
                                binary_pvalue_threshold = 0.1, 
-                               lambda_costs = c(.1, .01, 1e-3), 
+                               lambda_costs = c(1e-4, 5e-4, 1e-3, 1.5e-3), 
                                nfolds = 5, 
                                vi_step_size = 0.8, 
                                vi_threshold = 1e-8,
@@ -241,7 +242,8 @@ evaluate_watershed <- function(input_file,
       gam_data <- logistic_regression_genomic_annotation_model_cv(feat_train, binary_outliers_train, nfolds, lambda_costs, lambda_init)
       # Report optimal lambda learned from cross-validation data (if applicable)
       if (is.null(lambda_init)) {
-        message(paste0(nfolds,"-fold cross validation on GAM yielded optimal lambda of ", gam_data$lambda[1]))
+        message(paste0(nfolds,"-fold cross validation on GAM yielded optimal per-dimension lambdas: ",
+                       paste(gam_data$lambda, collapse=", ")))
       }
       # Compute GAM Predictions on test data in CPP file ("independent_crf_exact_updates.cpp")
       gam_posterior_test_obj <- update_independent_marginal_probabilities_exact_inference_cpp(feat_test, binary_outliers_test1, gam_data$gam_parameters$theta_singleton, gam_data$gam_parameters$theta_pair, gam_data$gam_parameters$theta, matrix(0,2,2), matrix(0,2,2), number_of_dimensions, choose(number_of_dimensions, 2), FALSE)
