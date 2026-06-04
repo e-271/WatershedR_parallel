@@ -164,7 +164,7 @@ double compute_pseudolikelihood_crf_likelihood_exact_inference_cpp(NumericMatrix
     }
     // L2 prior n feature weights
     for (int d = 0; d < feat.ncol(); d++) {
-      log_likelihood = log_likelihood - .5*lambda*(theta(d,dimension)*theta(d,dimension));
+      log_likelihood = log_likelihood - .5*lambda[dimension]*(theta(d,dimension)*theta(d,dimension));
     }
   }
   return log_likelihood;
